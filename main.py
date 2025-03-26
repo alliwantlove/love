@@ -1,38 +1,39 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import openai
+from openai import OpenAI
 import os
 
 app = FastAPI()
 
-# OpenAI 키 불러오기
-openai.api_key = os.getenv("OPENAI_API_KEY")  # 또는 직접 문자열로 대입해도 OK
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-@app.post("/recommend")
+@app.api_route("/recommend", methods=["GET", "POST"])
 async def recommend(request: Request):
-    body = await request.json()
-    user_input = body.get("userRequest", {}).get("utterance", "")
+    try:
+        body = await request.json()
+        utterance = body.get("userRequest", {}).get("utterance", "")
+    except:
+        # GET 요청 테스트일 경우, 임시 메시지
+        return JSONResponse(content={
+            "version": "2.0",
+            "template": {
+                "outputs": [{"simpleText": {"text": "이 API는 POST 방식으로 사용해야 합니다."}}]
+            }
+        })
 
-    # ChatGPT 요청
-    response = openai.chat.completions.create(
+    # GPT 호출
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": f"{user_input} 에 어울리는 장소 추천해줘"}]
+        messages=[
+            {"role": "user", "content": f"{utterance}에 어울리는 장소 추천해줘"}
+        ]
     )
 
     answer = response.choices[0].message.content.strip()
 
-    # 카카오 오픈빌더 응답 포맷으로 구성
-    kakao_response = {
+    return JSONResponse(content={
         "version": "2.0",
         "template": {
-            "outputs": [
-                {
-                    "simpleText": {
-                        "text": answer
-                    }
-                }
-            ]
+            "outputs": [{"simpleText": {"text": answer}}]
         }
-    }
-
-    return JSONResponse(content=kakao_response)
+    })
